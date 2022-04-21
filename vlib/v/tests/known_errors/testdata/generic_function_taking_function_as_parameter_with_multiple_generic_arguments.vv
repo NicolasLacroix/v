@@ -1,0 +1,11 @@
+// related to issue https://github.com/vlang/v/issues/14118
+
+// not compiling
+fn my_func<T>(x T, y T, f fn (T, T) (T)) T {
+	return f(x, y)
+}
+
+// compiling workaround (note the naming of the generic arguments a and b)
+fn my_func<T>(x T, y T, f fn (a T, b T) (T)) T {
+	return f(x, y)
+}
