@@ -64,7 +64,7 @@ fn (mut g Gen) infix_expr_arrow_op(node ast.InfixExpr) {
 	if gen_or {
 		elem_styp := g.typ(elem_type)
 		g.register_chan_push_optional_fn(elem_styp, styp)
-		g.write('Option_void $tmp_opt = __Option_${styp}_pushval(')
+		g.write('${option_name}_void $tmp_opt = __Option_${styp}_pushval(')
 	} else {
 		g.write('__${styp}_pushval(')
 	}
@@ -472,7 +472,7 @@ fn (mut g Gen) infix_expr_in_op(node ast.InfixExpr) {
 				return
 			}
 		}
-		if right.sym.info is ast.Array {
+		if right.sym.info is ast.ArrayFixed {
 			elem_type := right.sym.info.elem_type
 			elem_type_ := g.unwrap(elem_type)
 			if elem_type_.sym.kind == .sum_type {
@@ -708,7 +708,8 @@ fn (mut g Gen) infix_expr_left_shift_op(node ast.InfixExpr) {
 				g.write(', _MOV(($elem_type_str[]){ ')
 			}
 			// if g.autofree
-			needs_clone := array_info.elem_type.idx() == ast.string_type_idx && !g.is_builtin_mod
+			needs_clone := !g.is_builtin_mod && array_info.elem_type.idx() == ast.string_type_idx
+				&& array_info.elem_type.nr_muls() == 0
 			if needs_clone {
 				g.write('string_clone(')
 			}

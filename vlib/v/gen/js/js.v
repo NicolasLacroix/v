@@ -23,6 +23,7 @@ const (
 		'int_literal', 'float_literal', 'bool', 'string', 'map', 'array', 'rune', 'any', 'voidptr']
 	shallow_equatables = [ast.Kind.i8, .i16, .int, .i64, .u8, .u16, .u32, .u64, .f32, .f64,
 		.int_literal, .float_literal, .bool, .string]
+	option_name        = '_option'
 )
 
 struct SourcemapHelper {
@@ -899,7 +900,7 @@ fn (mut g JsGen) expr(node_ ast.Expr) {
 			// TODO
 		}
 		ast.CharLiteral {
-			if utf8_str_len(node.val) < node.val.len {
+			if node.val.len_utf8() < node.val.len {
 				g.write("new rune('$node.val'.charCodeAt())")
 			} else {
 				g.write("new u8('$node.val')")
@@ -1183,7 +1184,7 @@ fn (mut g JsGen) gen_assert_single_expr(expr ast.Expr, typ ast.Type) {
 			if expr is ast.CTempVar {
 				if expr.orig is ast.CallExpr {
 					should_clone = false
-					if expr.orig.or_block.kind == .propagate {
+					if expr.orig.or_block.kind == .propagate_option {
 						should_clone = true
 					}
 					if expr.orig.is_method && expr.orig.args.len == 0
@@ -1870,7 +1871,7 @@ fn (mut g JsGen) gen_return_stmt(it ast.Return) {
 	if fn_return_is_optional {
 		optional_none := node.exprs[0] is ast.None
 		ftyp := g.typ(node.types[0])
-		mut is_regular_option := ftyp == 'Option'
+		mut is_regular_option := ftyp == js.option_name
 		if optional_none || is_regular_option || node.types[0] == ast.error_type_idx {
 			if !isnil(g.fn_decl) && g.fn_decl.is_test {
 				test_error_var := g.new_tmp_var()
@@ -1895,7 +1896,7 @@ fn (mut g JsGen) gen_return_stmt(it ast.Return) {
 		tmp := g.new_tmp_var()
 		g.write('const $tmp = new ')
 
-		g.writeln('Option({});')
+		g.writeln('${js.option_name}({});')
 		g.write('${tmp}.state = new u8(0);')
 		g.write('${tmp}.data = ')
 		if it.exprs.len == 1 {
@@ -2426,8 +2427,8 @@ fn (mut g JsGen) match_expr(node ast.MatchExpr) {
 		g.inside_ternary = true
 	}
 
-	if node.cond in [ast.Ident, ast.SelectorExpr, ast.IntegerLiteral, ast.StringLiteral,
-		ast.FloatLiteral, ast.CallExpr, ast.EnumVal] {
+	if node.cond in [ast.Ident, ast.SelectorExpr, ast.IntegerLiteral, ast.StringLiteral, ast.FloatLiteral,
+		ast.CallExpr, ast.EnumVal] {
 		cond_var = CondExpr{node.cond}
 	} else {
 		s := g.new_tmp_var()
@@ -3376,11 +3377,11 @@ fn (mut g JsGen) gen_string_literal(it ast.StringLiteral) {
 		g.writeln('return s; })()')
 	} else {
 		g.write('"')
-		for char in text {
-			if char == `\n` {
+		for ch in text {
+			if ch == `\n` {
 				g.write('\\n')
 			} else {
-				g.write('$char.ascii_str()')
+				g.write('$ch.ascii_str()')
 			}
 		}
 		g.write('"')

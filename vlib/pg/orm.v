@@ -215,6 +215,9 @@ fn str_to_primitive(str string, typ int) ?orm.Primitive {
 		16 {
 			return orm.Primitive(str.i8() == 1)
 		}
+		18 {
+			return orm.Primitive(str == 't')
+		}
 		// i8
 		5 {
 			return orm.Primitive(str.i8())
@@ -263,6 +266,11 @@ fn str_to_primitive(str string, typ int) ?orm.Primitive {
 			return orm.Primitive(str)
 		}
 		orm.time {
+			if str.contains_any(' /:-') {
+				date_time_str := time.parse(str) ?
+				return orm.Primitive(date_time_str)
+			}
+
 			timestamp := str.int()
 			return orm.Primitive(time.unix(timestamp))
 		}

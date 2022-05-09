@@ -45,10 +45,6 @@ pub fn (mut p Parser) call_expr(language ast.Language, mod string) ast.CallExpr 
 	args := p.call_args()
 	last_pos := p.tok.pos()
 	p.check(.rpar)
-	// ! in mutable methods
-	if p.tok.kind == .not {
-		p.next()
-	}
 	mut pos := first_pos.extend(last_pos)
 	mut or_stmts := []ast.Stmt{} // TODO remove unnecessary allocations by just using .absent
 	mut or_pos := p.tok.pos()
@@ -70,13 +66,14 @@ pub fn (mut p Parser) call_expr(language ast.Language, mod string) ast.CallExpr 
 		p.close_scope()
 		p.inside_or_expr = was_inside_or_expr
 	}
-	if p.tok.kind == .question {
+	if p.tok.kind in [.question, .not] {
+		is_not := p.tok.kind == .not
 		// `foo()?`
 		p.next()
 		if p.inside_defer {
 			p.error_with_pos('error propagation not allowed inside `defer` blocks', p.prev_tok.pos())
 		}
-		or_kind = .propagate
+		or_kind = if is_not { .propagate_result } else { .propagate_option }
 	}
 	if fn_name in p.imported_symbols {
 		fn_name = p.imported_symbols[fn_name]
@@ -226,7 +223,7 @@ fn (mut p Parser) fn_decl() ast.FnDecl {
 					p.tok.pos())
 			}
 			'_fastcall' {
-				p.note_with_pos('teh tag [_fastcall] has been deprecated, it will be an error after 2022-06-01, use `[callconv: fastcall]` instead',
+				p.note_with_pos('the tag [_fastcall] has been deprecated, it will be an error after 2022-06-01, use `[callconv: fastcall]` instead',
 					p.tok.pos())
 			}
 			'callconv' {
@@ -355,8 +352,9 @@ fn (mut p Parser) fn_decl() ast.FnDecl {
 	if is_method && rec.typ.has_flag(.generic) {
 		sym := p.table.sym(rec.typ)
 		if sym.info is ast.Struct {
-			rec_generic_names := sym.info.generic_types.map(p.table.sym(it).name)
-			for gname in rec_generic_names {
+			fn_generic_names := generic_names.clone()
+			generic_names = sym.info.generic_types.map(p.table.sym(it).name)
+			for gname in fn_generic_names {
 				if gname !in generic_names {
 					generic_names << gname
 				}
@@ -783,9 +781,10 @@ fn (mut p Parser) fn_args() ([]ast.Param, bool, bool) {
 	} else {
 		p.tok.lit
 	}
+	is_generic_type := p.tok.kind == .name && p.tok.lit.len == 1 && p.tok.lit[0].is_capital()
 
 	types_only := p.tok.kind in [.amp, .ellipsis, .key_fn, .lsbr]
-		|| (p.peek_tok.kind == .comma && p.table.known_type(argname))
+		|| (p.peek_tok.kind == .comma && (p.table.known_type(argname) || is_generic_type))
 		|| p.peek_tok.kind == .dot || p.peek_tok.kind == .rpar
 		|| (p.tok.kind == .key_mut && (p.peek_token(2).kind == .comma
 		|| p.peek_token(2).kind == .rpar || (p.peek_tok.kind == .name

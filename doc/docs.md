@@ -2422,8 +2422,7 @@ V supports closures too.
 This means that anonymous functions can inherit variables from the scope they were created in.
 They must do so explicitly by listing all variables that are inherited.
 
-> Warning: currently works on Unix-based, x64 architectures only.
-Some work is in progress to make closures work on Windows, then other architectures.
+> Warning: currently works on x64 and arm64 architectures only.
 
 ```v oksyntax
 my_int := 1
@@ -5434,9 +5433,6 @@ numbers: [1, 2, 3]
 3
 ```
 
-
-
-
 #### `$env`
 
 ```v
@@ -5451,6 +5447,34 @@ fn main() {
 V can bring in values at compile time from environment variables.
 `$env('ENV_VAR')` can also be used in top-level `#flag` and `#include` statements:
 `#flag linux -I $env('JAVA_HOME')/include`.
+
+#### `$compile_error` and `$compile_warn`
+
+These two comptime functions are very useful for displaying custom errors/warnings during
+compile time.
+
+Both receive as their only argument a string literal that contains the message to display:
+
+```v failcompile nofmt
+// x.v
+module main
+
+$if linux {
+    $compile_error('Linux is not supported')
+}
+
+fn main() {
+}
+
+$ v run x.v
+x.v:4:5: error: Linux is not supported
+    2 |
+    3 | $if linux {
+    4 |     $compile_error('Linux is not supported')
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    5 | }
+    6 |
+```
 
 ### Environment specific files
 
@@ -6026,7 +6050,7 @@ a nested loop, and those do not risk violating memory-safety.
 
 ## Appendix I: Keywords
 
-V has 41 reserved keywords (3 are literals):
+V has 42 reserved keywords (3 are literals):
 
 ```v ignore
 as
@@ -6038,7 +6062,6 @@ const
 continue
 defer
 else
-embed
 enum
 false
 fn
@@ -6050,6 +6073,7 @@ import
 in
 interface
 is
+isreftype
 lock
 match
 module
@@ -6097,15 +6121,15 @@ This lists operators for [primitive types](#primitive-types) only.
 
 <<   left shift             integer << unsigned integer
 >>   right shift            integer >> unsigned integer
->>>  unsigned right shift	integer >> unsigned integer
+>>>  unsigned right shift   integer >> unsigned integer
 
 
 Precedence    Operator
-    5             *  /  %  <<  >> >>> &
-    4             +  -  |  ^
-    3             ==  !=  <  <=  >  >=
-    2             &&
-    1             ||
+    5            *  /  %  <<  >> >>> &
+    4            +  -  |  ^
+    3            ==  !=  <  <=  >  >=
+    2            &&
+    1            ||
 
 
 Assignment Operators

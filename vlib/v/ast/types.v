@@ -80,6 +80,7 @@ pub fn pref_arch_to_table_language(pref_arch pref.Arch) Language {
 // Each TypeSymbol is entered into `Table.types`.
 // See also: Table.sym.
 
+[minify]
 pub struct TypeSymbol {
 pub:
 	parent_idx int
@@ -93,11 +94,14 @@ pub mut:
 	is_pub   bool
 	language Language
 	idx      int
+	size     int = -1
+	align    int = -1
 }
 
 // max of 8
 pub enum TypeFlag {
 	optional
+	result
 	variadic
 	generic
 	shared_f
@@ -127,7 +131,7 @@ pub fn (t Type) atomic_typename() string {
 	idx := t.idx()
 	match idx {
 		ast.u32_type_idx { return 'atomic_uint' }
-		ast.int_type_idx { return 'atomic_int' }
+		ast.int_type_idx { return '_Atomic int' }
 		ast.u64_type_idx { return 'atomic_ullong' }
 		ast.i64_type_idx { return 'atomic_llong' }
 		else { return 'unknown_atomic' }
@@ -472,6 +476,7 @@ pub const (
 pub const (
 	void_type          = new_type(void_type_idx)
 	ovoid_type         = new_type(void_type_idx).set_flag(.optional) // the return type of `fn () ?`
+	rvoid_type         = new_type(void_type_idx).set_flag(.result) // the return type of `fn () !`
 	voidptr_type       = new_type(voidptr_type_idx)
 	byteptr_type       = new_type(byteptr_type_idx)
 	charptr_type       = new_type(charptr_type_idx)
@@ -823,6 +828,109 @@ pub fn (t &TypeSymbol) is_builtin() bool {
 	return t.mod == 'builtin'
 }
 
+// type_size returns the size and alignment (in bytes) of `typ`, similarly to  C's `sizeof()` and `alignof()`.
+pub fn (t &Table) type_size(typ Type) (int, int) {
+	if typ.has_flag(.optional) {
+		return t.type_size(ast.error_type_idx)
+	}
+	if typ.nr_muls() > 0 {
+		return t.pointer_size, t.pointer_size
+	}
+	mut sym := t.sym(typ)
+	if sym.size != -1 {
+		return sym.size, sym.align
+	}
+	mut size := 0
+	mut align := 0
+	match sym.kind {
+		.placeholder, .void, .none_, .generic_inst {}
+		.voidptr, .byteptr, .charptr, .function, .usize, .isize, .any, .thread, .chan {
+			size = t.pointer_size
+		}
+		.i8, .u8, .char, .bool {
+			size = 1
+			align = 1
+		}
+		.i16, .u16 {
+			size = 2
+			align = 2
+		}
+		.int, .u32, .rune, .f32, .enum_ {
+			size = 4
+			align = 4
+		}
+		.i64, .u64, .int_literal, .f64, .float_literal {
+			size = 8
+			align = 8
+		}
+		.alias {
+			size, align = t.type_size((sym.info as Alias).parent_type)
+		}
+		.struct_, .string, .multi_return {
+			mut max_alignment := 0
+			mut total_size := 0
+			types := if mut sym.info is Struct {
+				sym.info.fields.map(it.typ)
+			} else {
+				(sym.info as MultiReturn).types
+			}
+			for ftyp in types {
+				field_size, alignment := t.type_size(ftyp)
+				if alignment > max_alignment {
+					max_alignment = alignment
+				}
+				total_size = round_up(total_size, alignment) + field_size
+			}
+			size = round_up(total_size, max_alignment)
+			align = max_alignment
+		}
+		.sum_type, .interface_, .aggregate {
+			match mut sym.info {
+				SumType, Aggregate {
+					size = (sym.info.fields.len + 2) * t.pointer_size
+					align = t.pointer_size
+				}
+				Interface {
+					size = (sym.info.fields.len + 2) * t.pointer_size
+					align = t.pointer_size
+					for etyp in sym.info.embeds {
+						esize, _ := t.type_size(etyp)
+						size += esize - 2 * t.pointer_size
+					}
+				}
+				else {
+					// unreachable
+				}
+			}
+		}
+		.array_fixed {
+			info := sym.info as ArrayFixed
+			elem_size, elem_align := t.type_size(info.elem_type)
+			size = info.size * elem_size
+			align = elem_align
+		}
+		// TODO hardcoded:
+		.map {
+			size = if t.pointer_size == 8 { 120 } else { 80 }
+			align = t.pointer_size
+		}
+		.array {
+			size = if t.pointer_size == 8 { 32 } else { 24 }
+			align = t.pointer_size
+		}
+	}
+	sym.size = size
+	sym.align = align
+	return size, align
+}
+
+// round_up rounds the number `n` up to the next multiple `multiple`.
+// Note: `multiple` must be a power of 2.
+[inline]
+fn round_up(n int, multiple int) int {
+	return (n + multiple - 1) & -multiple
+}
+
 // for debugging/errors only, perf is not an issue
 pub fn (k Kind) str() string {
 	return match k {
@@ -879,6 +987,7 @@ pub fn (kinds []Kind) str() string {
 	return kinds_str
 }
 
+[minify]
 pub struct Struct {
 pub:
 	attrs []Attr
@@ -888,6 +997,7 @@ pub mut:
 	is_typedef     bool // C. [typedef]
 	is_union       bool
 	is_heap        bool
+	is_minify      bool
 	is_generic     bool
 	generic_types  []Type
 	concrete_types []Type
@@ -901,6 +1011,7 @@ pub mut:
 	concrete_types []Type // concrete types, e.g. <int, string>
 }
 
+[minify]
 pub struct Interface {
 pub mut:
 	types   []Type // all types that implement this interface
@@ -921,8 +1032,10 @@ pub:
 	vals             []string
 	is_flag          bool
 	is_multi_allowed bool
+	uses_exprs       bool
 }
 
+[minify]
 pub struct Alias {
 pub:
 	parent_type Type
@@ -945,6 +1058,7 @@ pub mut:
 	elem_type Type
 }
 
+[minify]
 pub struct ArrayFixed {
 pub:
 	size      int
@@ -970,6 +1084,7 @@ pub mut:
 	value_type Type
 }
 
+[minify]
 pub struct SumType {
 pub mut:
 	fields       []StructField
@@ -1136,6 +1251,9 @@ pub fn (t &Table) type_to_str_using_aliases(typ Type, import_aliases map[string]
 			if typ.has_flag(.optional) {
 				return '?'
 			}
+			if typ.has_flag(.result) {
+				return '!'
+			}
 			return 'void'
 		}
 		.thread {
@@ -1161,11 +1279,18 @@ pub fn (t &Table) type_to_str_using_aliases(typ Type, import_aliases map[string]
 		nr_muls--
 		res = 'shared ' + res
 	}
+	if typ.has_flag(.atomic_f) {
+		nr_muls--
+		res = 'atomic ' + res
+	}
 	if nr_muls > 0 && !typ.has_flag(.variadic) {
 		res = strings.repeat(`&`, nr_muls) + res
 	}
 	if typ.has_flag(.optional) {
 		res = '?$res'
+	}
+	if typ.has_flag(.result) {
+		res = '!$res'
 	}
 	return res
 }
@@ -1206,6 +1331,7 @@ fn (t Table) shorten_user_defined_typenames(originalname string, import_aliases 
 	return res
 }
 
+[minify]
 pub struct FnSignatureOpts {
 	skip_receiver bool
 	type_only     bool

@@ -4,11 +4,7 @@
 </p>
 <h1>The V Programming Language</h1>
 
-[vlang.io](https://vlang.io) |
-[Docs](https://github.com/vlang/v/blob/master/doc/docs.md) |
-[Changelog](https://github.com/vlang/v/blob/master/CHANGELOG.md) |
-[Speed](https://fast.vlang.io/) |
-[Contributing & compiler design](https://github.com/vlang/v/blob/master/CONTRIBUTING.md)
+[vlang.io](https://vlang.io) | [Docs](https://github.com/vlang/v/blob/master/doc/docs.md) | [Changelog](https://github.com/vlang/v/blob/master/CHANGELOG.md) | [Speed](https://fast.vlang.io/) | [Contributing & compiler design](https://github.com/vlang/v/blob/master/CONTRIBUTING.md)
 
 </div>
 <div align="center">
@@ -64,11 +60,11 @@ language, very similar to the way it is right now.
 
 ### Linux, macOS, Windows, *BSD, Solaris, WSL, Android, etc.
 
-Usually installing V is quite simple if you have an environment that already has a 
-functional `git` installation. 
+Usually installing V is quite simple if you have an environment that already has a
+functional `git` installation.
 
 * *(* ***PLEASE NOTE:*** *If you run into any trouble or you have a different operating
-system or Linux distribution that doesn't install or work immediately, please see 
+system or Linux distribution that doesn't install or work immediately, please see
 [Installation Issues](https://github.com/vlang/v/discussions/categories/installation-issues)
 and search for your OS and problem. If you can't find your problem, please add it to an
 existing discussion if one exists for your OS, or create a new one if a main discussion
